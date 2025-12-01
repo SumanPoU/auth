@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -29,14 +30,15 @@ export default function ForgotPasswordPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || "Failed to send reset email");
+        toast.error(data.message || "Failed to send reset email");
         return;
       }
 
+      toast.success("Check your email for a reset link");
       setSuccess(true);
       setEmail("");
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      toast.error("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }

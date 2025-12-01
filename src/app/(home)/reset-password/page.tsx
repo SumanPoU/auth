@@ -5,10 +5,13 @@ import type React from "react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Suspense } from "react";
+import toast from "react-hot-toast";
+import { PasswordInput } from "@/components/ui/password-input";
+import { validatePassword } from "@/utils/validatePassword";
+import { useRouter } from "next/navigation";
 
 export default function ResetPage() {
   return (
@@ -22,7 +25,7 @@ function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const email = searchParams.get("email");
-
+  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -39,13 +42,19 @@ function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
 
-    if (password !== confirmPassword) {
-      setError("Passwords don't match");
+    const errorMessage = validatePassword(password);
+    if (errorMessage) {
+      toast.error(errorMessage);
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
@@ -61,13 +70,15 @@ function ResetPasswordPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || "Failed to reset password");
+        toast.error(data.message || "Failed to reset password");
         return;
       }
 
+      toast.success("Password reset successfully");
       setSuccess(true);
+      router.push("/login");
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      toast.error("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -158,30 +169,22 @@ function ResetPasswordPage() {
             </p>
           </div>
 
-          {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
           <div className="space-y-4">
-            <Input
-              type="password"
+            <PasswordInput
               placeholder="New password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
-              minLength={6}
+              minLength={8}
             />
-            <Input
-              type="password"
+            <PasswordInput
               placeholder="Confirm password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               disabled={isLoading}
-              minLength={6}
+              minLength={8}
             />
           </div>
 
