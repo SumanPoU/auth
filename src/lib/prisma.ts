@@ -1,10 +1,19 @@
 import "dotenv/config";
-import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '../../generated/prisma/client'
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../../generated/prisma/client";
 
-const connectionString = `${process.env.DATABASE_URL}`
+const connectionString = process.env.DATABASE_URL!;
+const adapter = new PrismaPg({ connectionString });
 
-const adapter = new PrismaPg({ connectionString })
-const prisma = new PrismaClient({ adapter })
+// Create a type-safe global variable for caching
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-export { prisma }
+// Use cached instance in development or create a new one
+export const db =
+  globalForPrisma.prisma || new PrismaClient({ adapter, 
+    // log: ["query"]
+   });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = db;
+}
