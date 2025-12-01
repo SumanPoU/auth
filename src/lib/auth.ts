@@ -6,6 +6,7 @@ import GitHubProvider from "next-auth/providers/github";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { redirect } from "next/dist/server/api-utils";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
@@ -48,16 +49,49 @@ export const authOptions: NextAuthOptions = {
       },
 
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error(
+            JSON.stringify({
+              success: false,
+              message: "Email and password are required",
+            })
+          );
+        }
 
         const user = await db.user.findUnique({
           where: { email: credentials.email },
         });
 
-        if (!user || !user.password) return null;
+        if (!user || !user.password) {
+          throw new Error(
+            JSON.stringify({
+              success: false,
+              message: "Invalid email or password",
+            })
+          );
+        }
+
+        // Check if email is verified
+        if (!user.emailVerified) {
+          throw new Error(
+            JSON.stringify({
+              success: false,
+              message:
+                "Email not verified. Please verify your email before logging in.",
+              redirect: "/verify-email",
+            })
+          );
+        }
 
         const isValid = await compare(credentials.password, user.password);
-        if (!isValid) return null;
+        if (!isValid) {
+          throw new Error(
+            JSON.stringify({
+              success: false,
+              message: "Invalid email or password",
+            })
+          );
+        }
 
         return {
           id: user.id,
@@ -71,9 +105,10 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider !== "credentials") {
+      // Set emailVerified for social logins (not credentials)
+      if (account?.provider !== "credentials" && user.email) {
         const existing = await db.user.findUnique({
-          where: { email: user.email! },
+          where: { email: user.email },
         });
 
         if (existing && !existing.emailVerified) {
@@ -103,6 +138,16 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-
+  events: {
+    async createUser({ user }) {
+      // Automatically verify email for OAuth users
+      if (user.email && user.emailVerified === null) {
+        await db.user.update({
+          where: { id: user.id },
+          data: { emailVerified: new Date() },
+        });
+      }
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
 };

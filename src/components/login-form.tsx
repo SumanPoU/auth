@@ -8,6 +8,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { PasswordInput } from "@/components/ui/password-input";
+import toast from "react-hot-toast";
 
 export function LoginForm() {
   const router = useRouter();
@@ -39,12 +41,30 @@ export function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        try {
+          const parsed = JSON.parse(result.error);
+
+          // Show error toast
+          setError(parsed.message || "Login failed");
+          toast.error(parsed.message || "Login failed");
+
+          // Redirect if the backend suggests it
+          if (parsed.redirect) {
+            router.push(parsed.redirect);
+            return;
+          }
+        } catch {
+          // Fallback if error is not JSON
+          setError(result.error);
+          toast.error(result.error);
+        }
       } else if (result?.ok) {
+        toast.success("Logged in successfully!");
         router.push(callbackUrl);
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      setError("An unexpected error occurred. Please try again.");
+      toast.error("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -73,12 +93,15 @@ export function LoginForm() {
 
       if (result?.error) {
         setError("Failed to send magic link. Please try again.");
+        toast.error("Failed to send magic link. Please try again.");
       } else {
         setMagicLinkSent(true);
         setMagicLinkEmail("");
+        toast.success("Magic link sent! Check your email.");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
+      toast.error("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -136,12 +159,6 @@ export function LoginForm() {
             </p>
           </div>
 
-          {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
           <Input
             type="email"
             placeholder="you@example.com"
@@ -185,12 +202,6 @@ export function LoginForm() {
           </p>
         </div>
 
-        {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
         <div className="space-y-4">
           <Input
             type="email"
@@ -200,8 +211,7 @@ export function LoginForm() {
             required
             disabled={isLoading}
           />
-          <Input
-            type="password"
+          <PasswordInput
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -286,7 +296,7 @@ export function LoginForm() {
         <div className="text-center text-sm text-muted-foreground">
           Don't have an account?{" "}
           <a
-            href="/signup"
+            href="/register"
             className="text-primary hover:underline font-medium"
           >
             Sign up

@@ -1,51 +1,93 @@
 import { db } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
-import { success, z } from "zod";
+import { z } from "zod";
+import { sendVerificationEmail } from "@/lib/services/email-verification";
+import { randomBytes } from "crypto";
 
 const RegisterSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { name, email, password } = RegisterSchema.parse(body);
-    const hashed_password = await hash(password, 12);
 
-    const user = await db.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashed_password,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
+    // Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { email: email.toLowerCase() },
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "User created successfully",
-      user,
-    });
-  } catch (error: any) {
-    if (error.code === "P2002") {
+    if (existingUser) {
       return NextResponse.json(
         { message: "Email already exists" },
         { status: 400 }
       );
     }
-    return new NextResponse(
-      JSON.stringify({
-        status: "error",
-        message: error.message,
-      }),
+
+    const hashedPassword = await hash(password, 12);
+
+    // Create user
+    const user = await db.user.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        emailVerified: true,
+      },
+    });
+
+    // Generate verification token
+    const token = randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 5 * 60 * 1000);
+
+    await db.verificationToken.create({
+      data: {
+        identifier: email.toLowerCase(),
+        token,
+        expires,
+      },
+    });
+
+    // Send verification email
+    const emailSent = await sendVerificationEmail(email, token, name);
+
+    if (!emailSent) {
+      // Clean up user if email fails
+      await db.user.delete({ where: { id: user.id } });
+      return NextResponse.json(
+        { message: "Failed to send verification email" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message:
+          "Registration successful. Please check your email to verify your account.",
+        user,
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { message: error.issues[0].message },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json(
+      { message: error.message || "Registration failed" },
       { status: 500 }
     );
   }
